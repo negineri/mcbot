@@ -8,8 +8,136 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-mcbot = "mcbot:main"
+mcbot = "mcbot.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.mypy]
+strict = true
+exclude = [
+    # "tests/",           # Optional: Skip if using stubs/mocks
+    "build/",
+    "dist/",
+    "docs/",
+    "temp/",
+    ".github/scripts/",
+]
+plugins = [
+    "pydantic.mypy", # If you're using pydantic
+]
+
+[tool.ruff]
+line-length = 100
+fix = true
+exclude = ["build", "dist", ".venv", "tests/mocks", ".github/scripts"]
+src = ["app", "src", "tests"]
+unsafe-fixes = false
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle (errors)
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "I",   # isort
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "C4",  # flake8-comprehensions
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "T20", # flake8-print (disallow print)
+    "RET", # flake8-return
+    "A",   # flake8-builtins
+    "RUF", # Ruff-specific rules
+]
+ignore = [
+    "D211", # D211 conflicts with D203
+    "D212", # D212 conflicts with D213
+    # "D100",  # Missing docstring in public module
+    # "D104",  # Missing docstring in public package
+    "D107",   # Missing docstring in __init__
+    "RUF001", # 日本語コメントの際に邪魔
+    "RUF002", # 日本語コメントの際に邪魔
+    "RUF003", # 日本語コメントの際に邪魔
+    "D415",
+    "UP038",  # deprecated
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow test functions to have print statements or less strict docstring rules
+"tests/**/*.py" = ["S101", "D101", "D102", "D103"]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+ignore_missing_files = false
+tag = true
+sign_tags = false
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = false
+commit = true
+message = "Bump version: {current_version} → {new_version}"
+moveable_tags = []
+commit_args = "--no-verify"
+setup_hooks = []
+pre_commit_hooks = []
+post_commit_hooks = []
+
+[dependency-groups]
+dev = [
+    "bump-my-version>=1.1.2",
+    "hypothesis>=6.138.0",
+    "import-linter>=2.3",
+    "mypy>=1.15.0",
+    "packaging>=24.0",
+    "polyfactory>=2.18.0",
+    "pre-commit>=4.3.0",
+    "pytest>=8.3.5",
+    "pytest-benchmark>=5.1.0",
+    "pytest-cov>=6.1.1",
+    "pytest-mock>=3.14.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.11.4",
+    "tox>=4.25.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests (module independent, fast)",
+    "integration: Integration tests (cross-module, medium)",
+    "e2e: End-to-end tests (full workflows, slow)",
+    "contract: Contract tests (module boundaries)",
+    "slow: Slow tests (long-running, e.g., network calls)",
+    "skip_in_ci: Skip in CI",
+    "manual_test_only: Manual tests (requires user interaction)",
+]
+addopts = "--strict-markers --strict-config -vv --tb=short -s"
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+
+[tool.importlinter]
+root_packages = ["mcbot"]
+contract_types = [
+    "modular_monolith: scripts.importlinter_custom.ModularMonolithContract",
+]
+
+[[tool.importlinter.contracts]]
+name = "Modular Monolith Contract"
+type = "modular_monolith"
+root_package = "mcbot"
+
+# 並列実行設定
+# pytest -m unit -n auto     # 単体テスト並列実行
+# pytest -m integration      # 統合テスト逐次実行
