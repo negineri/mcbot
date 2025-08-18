@@ -1,3 +1,6 @@
+/temp/
+mise.local.toml
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -8,3 +11,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# mkdocs documentation
+/site/
+
+# Unit test / coverage reports
+.coverage
+.coverage.*
+/htmlcov/
+
+# Claude
+settings.local.json
