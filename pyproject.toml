@@ -10,6 +10,7 @@ dependencies = [
     "injector>=0.22.0",
     "platformdirs>=4.3.8",
     "pydantic>=2.11.7",
+    "tomli>=2.2.1",
     "tomli-w>=1.2.0",
 ]
 
