@@ -100,7 +100,7 @@ def create_config_paths() -> list[str]:
 
 def load_config_files(paths: list[str]) -> dict[str, Any]:
     """
-    Load configuration from YAML files in the user's config directories.
+    Load configuration from TOML files in the user's config directories.
 
     Returns:
         dict[str, Any]: Merged configuration data from all found files.
