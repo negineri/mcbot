@@ -90,7 +90,7 @@ class TestInit:
 
         result = self.runner.invoke(init, [])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 1
         assert "Configuration file already exists: settings.toml" in result.output
         assert "Use --force to overwrite." in result.output
 

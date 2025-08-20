@@ -1,5 +1,6 @@
 """Configuration management commands."""
 
+import sys
 from pathlib import Path
 
 import click
@@ -45,7 +46,7 @@ def init(path: str, force: bool, verbose: tuple[bool, ...]) -> None:
     if config_path.exists() and not force:
         click.echo(f"Configuration file already exists: {config_path}")
         click.echo("Use --force to overwrite.")
-        return
+        sys.exit(1)
 
     default_config = repo.model_dump(exclude_unset=True)
 
