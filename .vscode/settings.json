@@ -19,6 +19,10 @@
         {
             "name": "polyfactory",
             "depth": 3
+        },
+        {
+            "name": "click",
+            "depth": 2
         }
     ]
 }
