@@ -14,3 +14,9 @@ def common_config(tmp_path_factory: pytest.TempPathFactory) -> CommonConfig:
         user_cache_dir=str(tmp_path_factory.mktemp("user_cache")),
         working_dir=str(tmp_path_factory.mktemp("working")),
     )
+
+
+@pytest.fixture(autouse=True)
+def set_environments(monkeypatch: pytest.MonkeyPatch) -> None:
+    """環境変数のテスト用fixture."""
+    monkeypatch.setenv("MCBOT_CONFIG_PATHS", "debug.noexist")

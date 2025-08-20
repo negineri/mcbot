@@ -12,7 +12,7 @@ logger = getLogger(__name__)
 
 @click.command()
 @click_verbose_option
-def run(verbose: tuple[bool]) -> None:
+def run(verbose: tuple[bool, ...]) -> None:
     """Run the mcbot CLI application."""
     config = ConfigRepository.create()
     config_logging(config, verbose)

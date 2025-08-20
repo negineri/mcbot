@@ -3,6 +3,7 @@
 import click
 
 from mcbot.cli._utils import AliasedGroup, config_logging
+from mcbot.cli.config import config
 from mcbot.cli.run import run
 from mcbot.config.settings import ConfigRepository
 
@@ -18,3 +19,4 @@ def main() -> None:
 
 
 main.add_command(run)
+main.add_command(config)

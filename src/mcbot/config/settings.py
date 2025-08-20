@@ -1,6 +1,7 @@
 """Configuration module for the application."""
 
 import logging
+import os
 from collections.abc import Callable
 from os.path import expanduser
 from pathlib import Path
@@ -16,8 +17,9 @@ from mcbot.modules.common import CommonConfig
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONFIG_PATH = str(Path(__file__).parent / "settings.toml")
 CONFIG_PATHS = [
-    str(Path(__file__).parent / "settings.toml"),
+    DEFAULT_CONFIG_PATH,
     f"/etc/{APP_NAME}/settings.toml",
     expanduser(f"~/.config/{APP_NAME}/settings.toml"),
 ]
@@ -34,19 +36,37 @@ class ConfigRepository(BaseModel):
     common: CommonConfig = Field(default_factory=CommonConfig)  # Common configuration instance
 
     @classmethod
-    def create(
-        cls, options: dict[str, Any] | None = None, paths: list[str] = CONFIG_PATHS
-    ) -> "ConfigRepository":
+    def create(cls, *, options: dict[str, Any] | None = None) -> "ConfigRepository":
+        """Factory method to create an instance of AppConfig with default values."""
+        repo = cls.create_optional(options=options)
+        if repo:
+            return repo
+        logger.error("Using default configuration.")
+        repo = cls.create_optional(paths=[DEFAULT_CONFIG_PATH])
+        if not repo:
+            raise ValueError("Failed to create ConfigRepository")
+        return repo
+
+    @classmethod
+    def create_optional(
+        cls, *, options: dict[str, Any] | None = None, paths: list[str] | None = None
+    ) -> "ConfigRepository | None":
         """Factory method to create an instance of AppConfig with default values."""
         if options is None:
             options = {}
 
-        etc_options = load_config_files(paths=paths)
-        env_options = load_env_vars()
-        fixed_options = deep_update(etc_options, env_options)
-        fixed_options = deep_update(fixed_options, options)
+        paths = paths or create_config_paths()
 
-        return cls(**fixed_options)
+        try:
+            etc_options = load_config_files(paths)
+            env_options = load_env_vars()
+            fixed_options = deep_update(etc_options, env_options)
+            fixed_options = deep_update(fixed_options, options)
+            return cls(**fixed_options)
+
+        except Exception as e:
+            logger.error(f"Failed to create ConfigRepository: {e}")
+            return None
 
     def create_injector_builder(self) -> Callable[[Binder], None]:
         """
@@ -61,6 +81,21 @@ class ConfigRepository(BaseModel):
             binder.bind(CommonConfig, to=self.common)
 
         return configure
+
+
+def create_config_paths() -> list[str]:
+    """
+    Create a list of configuration paths.
+
+    Returns:
+        list[str]: List of configuration file paths.
+    """
+    config_paths = os.environ.get(f"{ENV_PREFIX}CONFIG_PATHS", "").split(":")
+
+    if config_paths != [""]:
+        return [DEFAULT_CONFIG_PATH, *config_paths]
+
+    return CONFIG_PATHS
 
 
 def load_config_files(paths: list[str]) -> dict[str, Any]:
@@ -97,8 +132,6 @@ def load_env_vars() -> dict[str, Any]:
     Returns:
         dict[str, Any]: Configuration data from environment variables.
     """
-    import os
-
     config_data: dict[str, Any] = {}
 
     for key, value in os.environ.items():

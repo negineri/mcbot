@@ -73,7 +73,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Allow test functions to have print statements or less strict docstring rules
-"tests/**/*.py" = ["S101", "D101", "D102", "D103"]
+"tests/**/*.py" = ["S101", "D101", "D102", "D103", "D403"]
 "__init__.py" = ["F401"]
 
 [tool.ruff.lint.pydocstyle]

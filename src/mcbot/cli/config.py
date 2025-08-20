@@ -5,14 +5,13 @@ from pathlib import Path
 import click
 import tomli_w
 
-from mcbot.cli._utils import AliasedGroup
-from mcbot.config.settings import CONFIG_PATHS, ConfigRepository
+from mcbot.cli._utils import AliasedGroup, click_verbose_option, config_logging
+from mcbot.config.settings import ConfigRepository, create_config_paths
 
 
 @click.group(cls=AliasedGroup)
 def config() -> None:
     """Configuration management commands."""
-    pass
 
 
 @config.command()
@@ -36,17 +35,18 @@ def show() -> None:
     is_flag=True,
     help="Overwrite existing configuration file",
 )
-def init(path: str, force: bool) -> None:
+@click_verbose_option
+def init(path: str, force: bool, verbose: tuple[bool, ...]) -> None:
     """Generate a default configuration file."""
-    config_path = Path(path)
+    repo = ConfigRepository.create()
+    config_logging(repo, verbose)
 
+    config_path = Path(path)
     if config_path.exists() and not force:
         click.echo(f"Configuration file already exists: {config_path}")
         click.echo("Use --force to overwrite.")
         return
 
-    # Create default configuration
-    repo = ConfigRepository.create()
     default_config = repo.model_dump(exclude_unset=True)
 
     # Ensure directory exists
@@ -65,31 +65,37 @@ def init(path: str, force: bool) -> None:
     type=click.Path(exists=True),
     help="Path to configuration file to validate",
 )
-def validate(config_file: str | None) -> None:
+@click_verbose_option
+def validate(config_file: str | None, verbose: tuple[bool, ...]) -> None:
     """Validate configuration file or current configuration."""
+    repo = ConfigRepository.create()
+    config_logging(repo, verbose)
+
     if config_file:
-        # Validate specific configuration file
-        try:
-            _ = ConfigRepository.create(paths=[config_file])
+        repo_opt = ConfigRepository.create_optional(paths=[config_file])
+        if repo_opt is None:
+            click.echo("Configuration file is invalid.")
+            raise click.Abort()
 
-            click.echo(f"Configuration file {config_file} is valid.")
-        except Exception as e:
-            click.echo(f"Configuration file {config_file} is invalid: {e}")
-            raise click.Abort() from e
-    else:
-        # Validate current configuration
-        try:
-            _ = ConfigRepository.create()
+        click.echo("Configuration file is valid.")
+        return
 
-            click.echo("Current configuration is valid.")
-        except Exception as e:
-            click.echo(f"Current configuration is invalid: {e}")
-            raise click.Abort() from e
+    repo_opt = ConfigRepository.create_optional()
+    if repo_opt is None:
+        click.echo("Current configuration is invalid.")
+        raise click.Abort()
+
+    click.echo("Current configuration is valid.")
+    return
 
 
 @config.command()
-def paths() -> None:
+@click_verbose_option
+def paths(verbose: tuple[bool, ...]) -> None:
     """Show configuration file search paths."""
+    repo = ConfigRepository.create()
+    config_logging(repo, verbose)
+
     click.echo("Configuration files are searched in the following order:")
-    for i, path in enumerate(CONFIG_PATHS, 1):
+    for i, path in enumerate(create_config_paths(), 1):
         click.echo(f"{i}. {path}")

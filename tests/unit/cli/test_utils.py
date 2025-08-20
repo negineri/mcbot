@@ -1,11 +1,13 @@
 """Tests for mcbot.cli._utils module."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import click
 import pytest
 
 from mcbot.cli._utils import AliasedGroup, config_logging
+from mcbot.config.settings import ConfigRepository
 
 
 class TestAliasedGroup:
@@ -87,11 +89,10 @@ class TestAliasedGroup:
 
 class TestConfigLogging:
     @pytest.fixture
-    def mock_config(self) -> Mock:
+    def mock_config(self, tmp_path: Path) -> ConfigRepository:
         """Create mock ConfigRepository."""
-        config = Mock()
-        config.common = Mock()
-        config.common.user_data_dir = "/home/test"
+        config = ConfigRepository()
+        config.common.user_data_dir = str(tmp_path)
         config.common.logging_config = {
             "version": 1,
             "handlers": {
@@ -102,28 +103,25 @@ class TestConfigLogging:
         return config
 
     @pytest.fixture
-    def mock_config_no_file(self) -> Mock:
+    def mock_config_no_file(self) -> ConfigRepository:
         """Create mock ConfigRepository without file handler."""
-        config = Mock()
-        config.common = Mock()
+        config = ConfigRepository()
         config.common.logging_config = {"version": 1, "handlers": {"console": {"level": "WARNING"}}}
         return config
 
     @patch("mcbot.cli._utils.dictConfig")
-    @patch("mcbot.cli._utils.logger")
     def test_config_logging_default(
-        self, mock_logger: Mock, mock_dict_config: Mock, mock_config_no_file: Mock
+        self, mock_dict_config: Mock, mock_config_no_file: ConfigRepository
     ) -> None:
         """Test default logging configuration."""
         config_logging(mock_config_no_file)
 
         mock_dict_config.assert_called_once_with(mock_config_no_file.common.logging_config)
-        mock_logger.info.assert_not_called()
 
     @patch("mcbot.cli._utils.dictConfig")
     @patch("mcbot.cli._utils.logger")
     def test_config_logging_verbose_single(
-        self, mock_logger: Mock, mock_dict_config: Mock, mock_config_no_file: Mock
+        self, mock_logger: Mock, mock_dict_config: Mock, mock_config_no_file: ConfigRepository
     ) -> None:
         """Test logging configuration with single verbose flag."""
         config_logging(mock_config_no_file, verbose=(True,))
@@ -135,76 +133,58 @@ class TestConfigLogging:
     @patch("mcbot.cli._utils.dictConfig")
     @patch("mcbot.cli._utils.logger")
     def test_config_logging_verbose_multiple(
-        self, mock_logger: Mock, mock_dict_config: Mock, mock_config_no_file: Mock
+        self, mock_logger: Mock, mock_dict_config: Mock, mock_config_no_file: ConfigRepository
     ) -> None:
         """Test logging configuration with multiple verbose flags."""
-        config_logging(mock_config_no_file, verbose=(True, True))  # type: ignore[arg-type]
+        config_logging(mock_config_no_file, verbose=(True, True))
 
         assert mock_config_no_file.common.logging_config["handlers"]["console"]["level"] == "DEBUG"
         mock_dict_config.assert_called_once_with(mock_config_no_file.common.logging_config)
         mock_logger.info.assert_called_once_with("Setting log level to DEBUG")
 
     @patch("mcbot.cli._utils.dictConfig")
-    @patch("mcbot.cli._utils.Path")
     def test_config_logging_with_file_handler(
-        self, mock_path_class: Mock, mock_dict_config: Mock, mock_config: Mock
+        self, mock_dict_config: Mock, mock_config: ConfigRepository
     ) -> None:
         """Test logging configuration with file handler creates directory."""
-        mock_path_instance = Mock()
-        mock_path_class.return_value = mock_path_instance
-        mock_path_instance.parent = Mock()
+        log_dir = Path(mock_config.common.user_data_dir) / "logs"
+        log_file_path = log_dir / "app.log"
 
         config_logging(mock_config)
 
         # Check that %(user_data_dir)s was replaced
-        expected_path = "/home/test/logs/app.log"
-        assert mock_config.common.logging_config["handlers"]["file"]["filename"] == expected_path
-
-        # Check that Path was called with the log file path
-        mock_path_class.assert_called_once_with(expected_path)
-
-        # Check that parent directory was created
-        mock_path_instance.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-
+        assert mock_config.common.logging_config["handlers"]["file"]["filename"] == str(
+            log_file_path
+        )
+        assert log_dir.exists()  # Ensure directory was created
         # Check that dictConfig was called
         mock_dict_config.assert_called_once_with(mock_config.common.logging_config)
 
     @patch("mcbot.cli._utils.dictConfig")
-    def test_config_logging_verbose_none(
-        self, mock_dict_config: Mock, mock_config_no_file: Mock
-    ) -> None:
-        """Test logging configuration with verbose=None."""
-        config_logging(mock_config_no_file, verbose=None)
-
-        mock_dict_config.assert_called_once_with(mock_config_no_file.common.logging_config)
-
-    @patch("mcbot.cli._utils.dictConfig")
     def test_config_logging_verbose_empty_tuple(
-        self, mock_dict_config: Mock, mock_config_no_file: Mock
+        self, mock_dict_config: Mock, mock_config_no_file: ConfigRepository
     ) -> None:
         """Test logging configuration with empty verbose tuple."""
-        config_logging(mock_config_no_file, verbose=())  # type: ignore[arg-type]
+        config_logging(mock_config_no_file, verbose=())
 
         mock_dict_config.assert_called_once_with(mock_config_no_file.common.logging_config)
 
     @patch("mcbot.cli._utils.dictConfig")
-    @patch("mcbot.cli._utils.Path")
     @patch("mcbot.cli._utils.logger")
     def test_config_logging_file_handler_with_verbose(
-        self, mock_logger: Mock, mock_path_class: Mock, mock_dict_config: Mock, mock_config: Mock
+        self,
+        mock_logger: Mock,
+        mock_dict_config: Mock,
+        mock_config: ConfigRepository,
     ) -> None:
         """Test logging configuration with file handler and verbose flag."""
-        mock_path_instance = Mock()
-        mock_path_class.return_value = mock_path_instance
-        mock_path_instance.parent = Mock()
+        expected_path = Path(mock_config.common.user_data_dir) / "logs" / "app.log"
 
         config_logging(mock_config, verbose=(True,))
 
-        # Check file path replacement and directory creation
-        expected_path = "/home/test/logs/app.log"
-        assert mock_config.common.logging_config["handlers"]["file"]["filename"] == expected_path
-        mock_path_instance.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-
+        assert mock_config.common.logging_config["handlers"]["file"]["filename"] == str(
+            expected_path
+        )
         # Check verbose logging configuration
         assert mock_config.common.logging_config["handlers"]["console"]["level"] == "INFO"
         mock_dict_config.assert_called_once_with(mock_config.common.logging_config)

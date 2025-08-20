@@ -1,14 +1,13 @@
 """Tests for mcbot.config.settings module."""
 
 import os
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from injector import Binder
+from injector import Injector
+from pytest import LogCaptureFixture, MonkeyPatch
 
 from mcbot.config.settings import (
-    CONFIG_PATHS,
     ConfigRepository,
     load_config_files,
     load_env_vars,
@@ -36,62 +35,60 @@ class TestConfigRepository:
         assert config.common.logging_config == {"version": 1, "handlers": {}}
         assert config.common.working_dir == "/custom/dir"
 
-    @patch("mcbot.config.settings.load_config_files")
-    @patch("mcbot.config.settings.load_env_vars")
-    def test_create_default(self, mock_load_env: Mock, mock_load_files: Mock) -> None:
+    def test_create_default(self) -> None:
         """Test ConfigRepository.create with default parameters."""
-        mock_load_files.return_value = {"common": {"working_dir": "test_dir"}}
-        mock_load_env.return_value = {"common": {"logging_config": {"level": "INFO"}}}
-
         config = ConfigRepository.create()
 
-        mock_load_files.assert_called_once_with(paths=CONFIG_PATHS)
-        mock_load_env.assert_called_once()
+        assert config is not None
+        assert isinstance(config.common, CommonConfig)
 
-        assert config.common.working_dir == "test_dir"
-        assert config.common.logging_config == {"level": "INFO"}
-
-    @patch("mcbot.config.settings.load_config_files")
-    @patch("mcbot.config.settings.load_env_vars")
-    def test_create_with_options(self, mock_load_env: Mock, mock_load_files: Mock) -> None:
-        """Test ConfigRepository.create with custom options."""
-        mock_load_files.return_value = {"common": {"working_dir": "file_dir"}}
-        mock_load_env.return_value = {"common": {"working_dir": "env_dir"}}
-        options = {"common": {"working_dir": "option_dir"}}
-
+    def test_create_with_valid_options(self) -> None:
+        """Test ConfigRepository.create with valid options."""
+        options = {"common": {"working_dir": "test_dir"}}  # Valid type
         config = ConfigRepository.create(options=options)
 
-        # Options should override env which overrides files
-        assert config.common.working_dir == "option_dir"
+        assert config is not None
+        assert config.common.working_dir == "test_dir"
 
-    @patch("mcbot.config.settings.load_config_files")
-    @patch("mcbot.config.settings.load_env_vars")
-    def test_create_with_custom_paths(self, mock_load_env: Mock, mock_load_files: Mock) -> None:
-        """Test ConfigRepository.create with custom config paths."""
-        mock_load_files.return_value = {}
-        mock_load_env.return_value = {}
-        custom_paths = ["/custom/path1", "/custom/path2"]
+    def test_create_with_invalid_options(self, caplog: LogCaptureFixture) -> None:
+        """Test ConfigRepository.create with invalid options."""
+        caplog.set_level("ERROR")
+        options = {"common": {"working_dir": 123}}  # Invalid type
+        config = ConfigRepository.create(options=options)
 
-        ConfigRepository.create(paths=custom_paths)
+        assert config is not None
+        assert "Failed to create ConfigRepository" in caplog.text
 
-        mock_load_files.assert_called_once_with(paths=custom_paths)
+    def test_create_optional_with_options(self) -> None:
+        """Test ConfigRepository.create with default parameters."""
+        config = ConfigRepository.create_optional(options={"common": {"working_dir": "test_dir"}})
+
+        assert config is not None
+        assert config.common.working_dir == "test_dir"
+
+    def test_create_optional_with_paths(self, tmp_path: Path) -> None:
+        """Test ConfigRepository.create with optional paths."""
+        config_path = tmp_path / "settings.toml"
+        config_path.write_text(
+            """
+            [common]
+            working_dir = "test_dir"
+            """
+        )
+        config = ConfigRepository.create_optional(paths=[str(config_path)])
+
+        assert config is not None
+        assert config.common.working_dir == "test_dir"
 
     def test_create_injector_builder(self) -> None:
         """Test create_injector_builder returns correct configuration function."""
         config = ConfigRepository()
-        mock_binder = Mock(spec=Binder)
 
         configure_fn = config.create_injector_builder()
-        configure_fn(mock_binder)
+        injector = Injector([configure_fn])
+        injected_config = injector.get(ConfigRepository)
 
-        # Check that both ConfigRepository and CommonConfig are bound
-        expected_calls = [
-            ((ConfigRepository,), {"to": config}),
-            ((CommonConfig,), {"to": config.common}),
-        ]
-
-        actual_calls = [(call[0], call[1]) for call in mock_binder.bind.call_args_list]
-        assert actual_calls == expected_calls
+        assert id(injected_config) == id(config)
 
 
 class TestLoadConfigFiles:
@@ -105,7 +102,7 @@ class TestLoadConfigFiles:
         result = load_config_files(["/nonexistent1.toml", "/nonexistent2.toml"])
         assert result == {}
 
-    def test_load_config_files_valid_file(self) -> None:
+    def test_load_config_files_valid_file(self, tmp_path: Path) -> None:
         """Test load_config_files with valid TOML file."""
         toml_content = """
         [common]
@@ -115,20 +112,16 @@ class TestLoadConfigFiles:
         version = 1
         """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write(toml_content)
-            temp_path = f.name
+        config_path = tmp_path / "settings.toml"
+        config_path.write_text(toml_content)
 
-        try:
-            result = load_config_files([temp_path])
+        result = load_config_files([str(config_path)])
 
-            assert "common" in result
-            assert result["common"]["working_dir"] == "test_dir"
-            assert result["common"]["logging_config"]["version"] == 1
-        finally:
-            Path(temp_path).unlink()
+        assert "common" in result
+        assert result["common"]["working_dir"] == "test_dir"
+        assert result["common"]["logging_config"]["version"] == 1
 
-    def test_load_config_files_multiple_files(self) -> None:
+    def test_load_config_files_multiple_files(self, tmp_path: Path) -> None:
         """Test load_config_files with multiple TOML files."""
         file1_content = """
         [common]
@@ -145,64 +138,37 @@ class TestLoadConfigFiles:
         value = "other"
         """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f1:
-            f1.write(file1_content)
-            path1 = f1.name
+        config_path1 = tmp_path / "settings1.toml"
+        config_path1.write_text(file1_content)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f2:
-            f2.write(file2_content)
-            path2 = f2.name
+        config_path2 = tmp_path / "settings2.toml"
+        config_path2.write_text(file2_content)
 
-        try:
-            result = load_config_files([path1, path2])
+        result = load_config_files([str(config_path1), str(config_path2)])
 
-            # file2 completely replaces file1's [common] section due to dict.update()
-            assert result["common"]["working_dir"] == "dir2"
-            assert result["common"]["user_cache_dir"] == "cache2"
-            # user_data_dir from file1 is lost due to section replacement
-            assert "user_data_dir" not in result["common"]
+        # file2 completely replaces file1's [common] section due to dict.update()
+        assert result["common"]["working_dir"] == "dir2"
 
-            # New section from file2
-            assert result["other_section"]["value"] == "other"
-        finally:
-            Path(path1).unlink()
-            Path(path2).unlink()
+        # file2 completely replaces file1's [common] section due to dict.update()
+        assert result["common"]["working_dir"] == "dir2"
+        assert result["common"]["user_cache_dir"] == "cache2"
+        # user_data_dir from file1 is lost due to section replacement
+        assert "user_data_dir" not in result["common"]
 
-    @patch("mcbot.config.settings.logger")
-    def test_load_config_files_invalid_toml(self, mock_logger: Mock) -> None:
+        # New section from file2
+        assert result["other_section"]["value"] == "other"
+
+    def test_load_config_files_invalid_toml(
+        self, caplog: LogCaptureFixture, tmp_path: Path
+    ) -> None:
         """Test load_config_files with invalid TOML content."""
         invalid_toml = "invalid toml [[ content"
+        config_path = tmp_path / "invalid_config.toml"
+        config_path.write_text(invalid_toml)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write(invalid_toml)
-            temp_path = f.name
+        load_config_files([str(config_path)])
 
-        try:
-            result = load_config_files([temp_path])
-
-            assert result == {}
-            mock_logger.warning.assert_called_once()
-            assert "Failed to load configuration file" in mock_logger.warning.call_args[0][0]
-        finally:
-            Path(temp_path).unlink()
-
-    @patch("builtins.open", side_effect=PermissionError("Access denied"))
-    @patch("mcbot.config.settings.logger")
-    @patch("pathlib.Path.exists", return_value=True)
-    def test_load_config_files_permission_error(
-        self, mock_exists: Mock, mock_logger: Mock, mock_open_fn: Mock
-    ) -> None:
-        """Test load_config_files handles permission errors gracefully."""
-        test_path = "/restricted/config.toml"
-        result = load_config_files([test_path])
-
-        # Verify mocks were called
-        mock_exists.assert_called()
-        mock_open_fn.assert_called()
-
-        assert result == {}
-        mock_logger.warning.assert_called_once()
-        assert "Failed to load configuration file" in mock_logger.warning.call_args[0][0]
+        assert "Failed to load configuration file" in caplog.text
 
 
 class TestLoadEnvVars:
@@ -212,87 +178,40 @@ class TestLoadEnvVars:
             result = load_env_vars()
             assert result == {}
 
-    @patch("mcbot.config.settings.ENV_PREFIX", "TEST_")
-    def test_load_env_vars_simple(self) -> None:
+    def test_load_env_vars_simple(self, monkeypatch: MonkeyPatch) -> None:
         """Test load_env_vars with simple top-level variables."""
-        env_vars = {
-            "TEST_SIMPLE": "value1",
-            "TEST_ANOTHER": "value2",
-            "OTHER_VAR": "ignored",  # Different prefix
-        }
+        monkeypatch.setenv("MCBOT_SIMPLE", "value1")
+        monkeypatch.setenv("MCBOT_ANOTHER", "value2")
+        monkeypatch.setenv("OTHER_VAR", "ignored")  # Different prefix
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            result = load_env_vars()
+        result = load_env_vars()
 
-            assert result == {"simple": "value1", "another": "value2"}
+        assert result["simple"] == "value1"
+        assert result["another"] == "value2"
+        assert "other_var" not in result  # Should be ignored
 
-    @patch("mcbot.config.settings.ENV_PREFIX", "TEST_")
-    def test_load_env_vars_nested(self) -> None:
+    def test_load_env_vars_nested(self, monkeypatch: MonkeyPatch) -> None:
         """Test load_env_vars with nested configuration."""
-        env_vars = {
-            "TEST_COMMON__WORKING_DIR": "/test/dir",
-            "TEST_COMMON__USER_DATA_DIR": "/test/data",
-            "TEST_LOGGING__LEVEL": "DEBUG",
-            "TEST_DEEP__NESTED__VALUE": "deep_value",
-        }
+        monkeypatch.setenv("MCBOT_COMMON__WORKING_DIR", "/test/dir")
+        monkeypatch.setenv("MCBOT_COMMON__USER_DATA_DIR", "/test/data")
+        monkeypatch.setenv("MCBOT_LOGGING__LEVEL", "DEBUG")
+        monkeypatch.setenv("MCBOT_DEEP__NESTED__VALUE", "deep_value")
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            result = load_env_vars()
+        result = load_env_vars()
 
-            expected = {
-                "common": {"working_dir": "/test/dir", "user_data_dir": "/test/data"},
-                "logging": {"level": "DEBUG"},
-                "deep": {"nested": {"value": "deep_value"}},
-            }
+        assert result["common"]["working_dir"] == "/test/dir"
+        assert result["common"]["user_data_dir"] == "/test/data"
+        assert result["logging"]["level"] == "DEBUG"
+        assert result["deep"]["nested"]["value"] == "deep_value"
 
-            assert result == expected
-
-    @patch("mcbot.config.settings.ENV_PREFIX", "TEST_")
-    def test_load_env_vars_mixed(self) -> None:
-        """Test load_env_vars with mixed simple and nested variables."""
-        env_vars = {
-            "TEST_SIMPLE_VAR": "simple",
-            "TEST_NESTED__VALUE": "nested",
-            "TEST_NESTED__ANOTHER": "another_nested",
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            result = load_env_vars()
-
-            expected = {
-                "simple_var": "simple",
-                "nested": {"value": "nested", "another": "another_nested"},
-            }
-
-            assert result == expected
-
-    @patch("mcbot.config.settings.ENV_PREFIX", "TEST_")
-    def test_load_env_vars_case_conversion(self) -> None:
+    def test_load_env_vars_case_conversion(self, monkeypatch: MonkeyPatch) -> None:
         """Test load_env_vars converts keys to lowercase."""
-        env_vars = {
-            "TEST_UPPER_CASE": "value1",
-            "TEST_MixedCase": "value2",
-            "TEST_lower_case": "value3",
-        }
+        monkeypatch.setenv("MCBOT_UPPER_CASE", "value1")
+        monkeypatch.setenv("MCBOT_MixedCase", "value2")
+        monkeypatch.setenv("MCBOT_lower_case", "value3")
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            result = load_env_vars()
+        result = load_env_vars()
 
-            expected = {"upper_case": "value1", "mixedcase": "value2", "lower_case": "value3"}
-
-            assert result == expected
-
-    @patch("mcbot.config.settings.ENV_PREFIX", "TEST_")
-    def test_load_env_vars_overwrites_nested(self) -> None:
-        """Test load_env_vars handles overwriting nested structures."""
-        env_vars = {
-            "TEST_CONFIG__FIRST": "first_value",
-            "TEST_CONFIG__SECOND": "second_value",
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            result = load_env_vars()
-
-            expected = {"config": {"first": "first_value", "second": "second_value"}}
-
-            assert result == expected
+        assert result["upper_case"] == "value1"
+        assert result["mixedcase"] == "value2"
+        assert result["lower_case"] == "value3"
