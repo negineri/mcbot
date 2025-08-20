@@ -150,7 +150,6 @@ class TestLoadConfigFiles:
         assert result["common"]["working_dir"] == "dir2"
 
         # file2 completely replaces file1's [common] section due to dict.update()
-        assert result["common"]["working_dir"] == "dir2"
         assert result["common"]["user_cache_dir"] == "cache2"
         # user_data_dir from file1 is lost due to section replacement
         assert "user_data_dir" not in result["common"]
