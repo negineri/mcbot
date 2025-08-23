@@ -22,18 +22,14 @@ class TestConfigRepository:
 
         assert isinstance(config.common, CommonConfig)
         assert config.common.logging_config == {}
-        assert config.common.working_dir == "."
 
     def test_init_with_common_config(self) -> None:
         """Test ConfigRepository initialization with custom CommonConfig."""
-        common_config = CommonConfig(
-            logging_config={"version": 1, "handlers": {}}, working_dir="/custom/dir"
-        )
+        common_config = CommonConfig(logging_config={"version": 1, "handlers": {}})
         config = ConfigRepository(common=common_config)
 
         assert config.common == common_config
         assert config.common.logging_config == {"version": 1, "handlers": {}}
-        assert config.common.working_dir == "/custom/dir"
 
     def test_create_default(self) -> None:
         """Test ConfigRepository.create with default parameters."""
@@ -44,16 +40,16 @@ class TestConfigRepository:
 
     def test_create_with_valid_options(self) -> None:
         """Test ConfigRepository.create with valid options."""
-        options = {"common": {"working_dir": "test_dir"}}  # Valid type
+        options = {"common": {"user_data_dir": "test_dir"}}  # Valid type
         config = ConfigRepository.create(options=options)
 
         assert config is not None
-        assert config.common.working_dir == "test_dir"
+        assert config.common.user_data_dir == Path("test_dir")
 
     def test_create_with_invalid_options(self, caplog: LogCaptureFixture) -> None:
         """Test ConfigRepository.create with invalid options."""
         caplog.set_level("ERROR")
-        options = {"common": {"working_dir": 123}}  # Invalid type
+        options = {"common": {"user_data_dir": 123}}  # Invalid type
         config = ConfigRepository.create(options=options)
 
         assert config is not None
@@ -61,10 +57,10 @@ class TestConfigRepository:
 
     def test_create_optional_with_options(self) -> None:
         """Test ConfigRepository.create with default parameters."""
-        config = ConfigRepository.create_optional(options={"common": {"working_dir": "test_dir"}})
+        config = ConfigRepository.create_optional(options={"common": {"user_data_dir": "test_dir"}})
 
         assert config is not None
-        assert config.common.working_dir == "test_dir"
+        assert config.common.user_data_dir == Path("test_dir")
 
     def test_create_optional_with_paths(self, tmp_path: Path) -> None:
         """Test ConfigRepository.create with optional paths."""
@@ -72,13 +68,13 @@ class TestConfigRepository:
         config_path.write_text(
             """
             [common]
-            working_dir = "test_dir"
+            user_data_dir = "test_dir"
             """
         )
         config = ConfigRepository.create_optional(paths=[str(config_path)])
 
         assert config is not None
-        assert config.common.working_dir == "test_dir"
+        assert config.common.user_data_dir == Path("test_dir")
 
     def test_create_injector_builder(self) -> None:
         """Test create_injector_builder returns correct configuration function."""
@@ -106,7 +102,7 @@ class TestLoadConfigFiles:
         """Test load_config_files with valid TOML file."""
         toml_content = """
         [common]
-        working_dir = "test_dir"
+        user_data_dir = "test_dir"
 
         [common.logging_config]
         version = 1
@@ -118,20 +114,19 @@ class TestLoadConfigFiles:
         result = load_config_files([str(config_path)])
 
         assert "common" in result
-        assert result["common"]["working_dir"] == "test_dir"
+        assert result["common"]["user_data_dir"] == "test_dir"
         assert result["common"]["logging_config"]["version"] == 1
 
     def test_load_config_files_multiple_files(self, tmp_path: Path) -> None:
         """Test load_config_files with multiple TOML files."""
         file1_content = """
         [common]
-        working_dir = "dir1"
         user_data_dir = "data1"
         """
 
         file2_content = """
         [common]
-        working_dir = "dir2"  # This should override file1's common section
+        user_data_dir = "dir2"  # This should override file1's common section
         user_cache_dir = "cache2"
 
         [other_section]
@@ -147,12 +142,10 @@ class TestLoadConfigFiles:
         result = load_config_files([str(config_path1), str(config_path2)])
 
         # file2 completely replaces file1's [common] section due to dict.update()
-        assert result["common"]["working_dir"] == "dir2"
+        assert result["common"]["user_data_dir"] == "dir2"
 
         # file2 completely replaces file1's [common] section due to dict.update()
         assert result["common"]["user_cache_dir"] == "cache2"
-        # user_data_dir from file1 is lost due to section replacement
-        assert "user_data_dir" not in result["common"]
 
         # New section from file2
         assert result["other_section"]["value"] == "other"
@@ -191,14 +184,12 @@ class TestLoadEnvVars:
 
     def test_load_env_vars_nested(self, monkeypatch: MonkeyPatch) -> None:
         """Test load_env_vars with nested configuration."""
-        monkeypatch.setenv("MCBOT_COMMON__WORKING_DIR", "/test/dir")
         monkeypatch.setenv("MCBOT_COMMON__USER_DATA_DIR", "/test/data")
         monkeypatch.setenv("MCBOT_LOGGING__LEVEL", "DEBUG")
         monkeypatch.setenv("MCBOT_DEEP__NESTED__VALUE", "deep_value")
 
         result = load_env_vars()
 
-        assert result["common"]["working_dir"] == "/test/dir"
         assert result["common"]["user_data_dir"] == "/test/data"
         assert result["logging"]["level"] == "DEBUG"
         assert result["deep"]["nested"]["value"] == "deep_value"

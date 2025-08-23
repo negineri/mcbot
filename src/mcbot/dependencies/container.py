@@ -9,11 +9,13 @@ def configure(binder: Binder) -> None:
     """Configure the dependency injection container."""
 
 
-def get_injector() -> Injector:
-    """Get configured injector instance.
+def create_injector(config: ConfigRepository) -> Injector:
+    """Create a new injector instance.
+
+    Args:
+        config (ConfigRepository): Configuration repository.
 
     Returns:
-        Configured injector instance.
+        Injector: New injector instance.
     """
-    config = ConfigRepository.create()
     return Injector([config.create_injector_builder(), configure])

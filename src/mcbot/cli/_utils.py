@@ -54,9 +54,9 @@ def config_logging(config: ConfigRepository, verbose: tuple[bool, ...] | None = 
     """Configure logging based on verbosity."""
     # Create logs directory if file handler is configured
     if "file" in config.common.logging_config.get("handlers", {}):
-        log_file_path = config.common.logging_config["handlers"]["file"]["filename"]
+        log_file_path: str = config.common.logging_config["handlers"]["file"]["filename"]
         # Replace %(user_data_dir)s with actual user data directory
-        log_file_path = log_file_path.replace("%(user_data_dir)s", config.common.user_data_dir)
+        log_file_path = log_file_path.replace("%(user_data_dir)s", str(config.common.user_data_dir))
         config.common.logging_config["handlers"]["file"]["filename"] = log_file_path
 
         # Ensure log directory exists

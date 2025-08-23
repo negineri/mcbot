@@ -92,7 +92,7 @@ class TestConfigLogging:
     def mock_config(self, tmp_path: Path) -> ConfigRepository:
         """Create mock ConfigRepository."""
         config = ConfigRepository()
-        config.common.user_data_dir = str(tmp_path)
+        config.common.user_data_dir = tmp_path
         config.common.logging_config = {
             "version": 1,
             "handlers": {

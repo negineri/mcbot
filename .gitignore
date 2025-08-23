@@ -1,5 +1,11 @@
 /temp/
 mise.local.toml
+/.benchmarks/
+/.tox/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.import_linter_cache/
 
 # Python-generated files
 __pycache__/

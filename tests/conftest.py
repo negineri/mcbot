@@ -10,9 +10,8 @@ def common_config(tmp_path_factory: pytest.TempPathFactory) -> CommonConfig:
     """CommonConfigのテスト用fixture."""
     return CommonConfig(
         logging_config={},
-        user_data_dir=str(tmp_path_factory.mktemp("user_data")),
-        user_cache_dir=str(tmp_path_factory.mktemp("user_cache")),
-        working_dir=str(tmp_path_factory.mktemp("working")),
+        user_data_dir=tmp_path_factory.mktemp("user_data"),
+        user_cache_dir=tmp_path_factory.mktemp("user_cache"),
     )
 
 

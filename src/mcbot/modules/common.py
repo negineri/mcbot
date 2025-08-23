@@ -1,5 +1,6 @@
 """Common utilities for the modules."""
 
+from pathlib import Path
 from typing import Any
 
 from platformdirs import PlatformDirs
@@ -18,6 +19,5 @@ class CommonConfig(BaseModel):
     """
 
     logging_config: dict[str, Any] = Field(default_factory=dict)  # Logging configuration
-    user_data_dir: str = Field(default=pfd.user_data_dir)  # User data directory
-    user_cache_dir: str = Field(default=pfd.user_cache_dir)  # User cache directory
-    working_dir: str = Field(default=".")  # Working directory
+    user_data_dir: Path = Field(default=Path(pfd.user_data_dir))  # User data directory
+    user_cache_dir: Path = Field(default=Path(pfd.user_cache_dir))  # User cache directory
